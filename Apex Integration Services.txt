@@ -1,0 +1,162 @@
+                                          Apex Integration Services
+
+Apex REST Callouts:
+
+AnimalLocator.apxc
+
+public class AnimalLocator {
+ 
+    public static String getAnimalNameById (Integer id) {
+        String AnimalName = '';        
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint('https://th-apex-http-callout.herokuapp.com/animals/'+id);
+        request.setMethod('GET');
+        HttpResponse response = http.send(request);
+        if (response.getStatusCode() == 200) {
+            Map<String,Object> results = (Map<String,Object>) JSON.deserializeUntyped(response.getBody());
+            Map<String, Object> animal = (Map<String, Object>) results.get('animal');
+            animalName = (String) animal.get('name');
+        }
+        return animalName;
+    }
+}
+
+AnimalLocatorTest.apxc
+
+@isTest
+private class AnimalLocatorTest {
+@isTest static  void testGet() {
+        Test.setMock(HttpCalloutMock.class, new AnimalLocatorMock());
+        String result = AnimalLocator.getAnimalNameById (7);
+        System.assertNotEquals(null,result, 'The callout returned a null response.');        
+        System.assertEquals('panda', result,
+                            'The animal name should be \'panda\'');           }    }
+
+
+Apex SOAP Callouts:
+
+ParkService.apxc
+
+public class ParkService {
+    public class byCountryResponse {
+        public String[] return_x;
+        private String[] return_x_type_info = new String[]{'return','http://parks.services/',null,'0','-1','false'};
+        private String[] apex_schema_type_info = new String[]{'http://parks.services/','false','false'};
+        private String[] field_order_type_info = new String[]{'return_x'};
+    }
+    public class byCountry {
+        public String arg0;
+        private String[] arg0_type_info = new String[]{'arg0','http://parks.services/',null,'0','1','false'};
+        private String[] apex_schema_type_info = new String[]{'http://parks.services/','false','false'};
+        private String[] field_order_type_info = new String[]{'arg0'};
+    }
+    public class ParksImplPort {
+        public String endpoint_x = 'https://th-apex-soap-service.herokuapp.com/service/parks';
+        public Map<String,String> inputHttpHeaders_x;
+        public Map<String,String> outputHttpHeaders_x;
+        public String clientCertName_x;
+        public String clientCert_x;
+        public String clientCertPasswd_x;
+        public Integer timeout_x;
+        private String[] ns_map_type_info = new String[]{'http://parks.services/', 'ParkService'};
+        public String[] byCountry(String arg0) {
+            ParkService.byCountry request_x = new ParkService.byCountry();
+            request_x.arg0 = arg0;
+            ParkService.byCountryResponse response_x;
+            Map<String, ParkService.byCountryResponse> response_map_x = new Map<String, ParkService.byCountryResponse>();
+            response_map_x.put('response_x', response_x);
+            WebServiceCallout.invoke(
+              this,
+              request_x,
+              response_map_x,
+              new String[]{endpoint_x,
+              '',
+              'http://parks.services/',
+              'byCountry',
+              'http://parks.services/',
+              'byCountryResponse',
+              'ParkService.byCountryResponse'}
+            );
+            response_x = response_map_x.get('response_x');
+            return response_x.return_x;
+        }
+    }
+}
+
+ParkLocator.apxc
+
+public class ParkLocator {
+    public static String[] country(String country){
+        ParkService.ParksImplPort parks = new ParkService.ParksImplPort();
+        String[] parksname = parks.byCountry(country);
+        return parksname;
+    }
+}
+
+ParkLocatorTest.apxc
+
+@isTest
+private class ParkLocatorTest{
+    @isTest 
+    static void testParkLocator() {
+        Test.setMock(WebServiceMock.class, new ParkServiceMock());
+        String[] arrayOfParks = ParkLocator.country('India');
+
+        System.assertEquals('Park1', arrayOfParks[0]);
+    }
+}
+
+
+
+Apex Web Services:
+
+AccountManager.apxc
+
+@RestResource(urlMapping='/Accounts/*/contacts')
+global with sharing class AccountManager {
+
+
+    @HttpGet
+    global static account getAccount() {
+
+        RestRequest request = RestContext.request;
+
+        String accountId = request.requestURI.substring(request.requestURI.lastIndexOf('/')-18,
+          request.requestURI.lastIndexOf('/'));
+        List<Account> a = [select id, name, (select id, name from contacts) from account where id = :accountId];
+        List<contact> co = [select id, name from contact where account.id = :accountId];
+        system.debug('** a[0]= '+ a[0]);
+        return a[0];
+
+    }
+
+}
+
+
+AccountManagerTest.apxc
+
+@Istest(SeeAllData=true)
+public class AccountManagerTest {
+  @isTest static void testGetAccount() {
+    Id recordId = createTestRecord();
+    RestRequest request = new RestRequest();
+    request.requestUri =
+        'https://resourceful-badger-76636-dev-ed.my.salesforce.com/services/apexrest/Accounts/'+recordId+'/contacts'
+        + recordId;
+    request.httpMethod = 'GET';
+    RestContext.request = request;
+    Account thisAcc = AccountManager.getAccount();
+    System.assert(thisAcc != null);
+    System.assertEquals('Test record', thisAcc.Name);
+}
+static Id createTestRecord() 
+{
+    Account accTest = new Account(
+        Name='Test record');
+    insert accTest;
+    return accTest.Id;
+}     
+
+
+}
